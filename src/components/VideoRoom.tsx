@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ReactPlayer from "react-player";
 import { Link, Play, Pause, Maximize, Volume2, Users, Settings } from "lucide-react";
 import { io, Socket } from "socket.io-client";
-import { cn } from "@/lib/utils";
 
 interface RoomState {
   videoId: string | null;
@@ -15,7 +14,7 @@ export function VideoRoom({ roomId }: { roomId: string }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [inputUrl, setInputUrl] = useState("");
-  const playerRef = useRef<ReactPlayer>(null);
+  const playerRef = useRef<HTMLVideoElement>(null);
   
   // Track if current play/pause/seek was triggered by a remote socket event
   const isRemoteAction = useRef(false);
@@ -30,8 +29,15 @@ export function VideoRoom({ roomId }: { roomId: string }) {
     newSocket.on("sync_state", (state: RoomState) => {
       isRemoteAction.current = true;
       setRoomState(state);
-      if (playerRef.current && Math.abs(playerRef.current.getCurrentTime() - state.currentTime) > 1) {
-        playerRef.current.seekTo(state.currentTime);
+      if (playerRef.current) {
+        if (Math.abs(playerRef.current.currentTime - state.currentTime) > 1) {
+          playerRef.current.currentTime = state.currentTime;
+        }
+        if (state.playing) {
+          playerRef.current.play().catch(() => {});
+        } else {
+          playerRef.current.pause();
+        }
       }
       setTimeout(() => { isRemoteAction.current = false; }, 100);
     });
@@ -39,8 +45,11 @@ export function VideoRoom({ roomId }: { roomId: string }) {
     newSocket.on("play", (time: number) => {
       isRemoteAction.current = true;
       setRoomState(prev => prev ? { ...prev, playing: true, currentTime: time } : null);
-      if (playerRef.current && Math.abs(playerRef.current.getCurrentTime() - time) > 1) {
-        playerRef.current.seekTo(time);
+      if (playerRef.current) {
+        if (Math.abs(playerRef.current.currentTime - time) > 1) {
+          playerRef.current.currentTime = time;
+        }
+        playerRef.current.play().catch(() => {});
       }
       setTimeout(() => { isRemoteAction.current = false; }, 100);
     });
@@ -49,7 +58,8 @@ export function VideoRoom({ roomId }: { roomId: string }) {
       isRemoteAction.current = true;
       setRoomState(prev => prev ? { ...prev, playing: false, currentTime: time } : null);
       if (playerRef.current) {
-        playerRef.current.seekTo(time);
+        playerRef.current.currentTime = time;
+        playerRef.current.pause();
       }
       setTimeout(() => { isRemoteAction.current = false; }, 100);
     });
@@ -58,7 +68,7 @@ export function VideoRoom({ roomId }: { roomId: string }) {
       isRemoteAction.current = true;
       setRoomState(prev => prev ? { ...prev, currentTime: time } : null);
       if (playerRef.current) {
-        playerRef.current.seekTo(time);
+        playerRef.current.currentTime = time;
       }
       setTimeout(() => { isRemoteAction.current = false; }, 100);
     });
@@ -92,17 +102,17 @@ export function VideoRoom({ roomId }: { roomId: string }) {
 
   const handlePlay = () => {
     if (isRemoteAction.current || !socket || !playerRef.current) return;
-    socket.emit("play", roomId, playerRef.current.getCurrentTime());
+    socket.emit("play", roomId, playerRef.current.currentTime);
   };
 
   const handlePause = () => {
     if (isRemoteAction.current || !socket || !playerRef.current) return;
-    socket.emit("pause", roomId, playerRef.current.getCurrentTime());
+    socket.emit("pause", roomId, playerRef.current.currentTime);
   };
 
-  const handleSeek = (time: number) => {
+  const handleSeeking = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     if (isRemoteAction.current || !socket) return;
-    socket.emit("seek", roomId, time);
+    socket.emit("seek", roomId, e.currentTarget.currentTime);
   };
 
   const handleCopyLink = () => {
@@ -119,7 +129,7 @@ export function VideoRoom({ roomId }: { roomId: string }) {
   }
 
   const directVideoUrl = roomState.videoId 
-    ? `https://pixeldrain.com/api/file/${roomState.videoId}`
+    ? `https://pixeldrain.com/api/file/${roomState.videoId}#.mp4`
     : null;
 
   return (
@@ -172,21 +182,16 @@ export function VideoRoom({ roomId }: { roomId: string }) {
             <div className="w-full h-full relative group">
               <ReactPlayer
                 ref={playerRef}
-                url={directVideoUrl}
+                src={directVideoUrl}
                 width="100%"
                 height="100%"
                 playing={roomState.playing}
                 controls={true}
                 onPlay={handlePlay}
                 onPause={handlePause}
-                onSeek={handleSeek}
-                config={{
-                  file: {
-                    attributes: {
-                      controlsList: 'nodownload'
-                    }
-                  }
-                }}
+                onSeeking={handleSeeking}
+                controlsList="nodownload"
+                playsInline={true}
               />
             </div>
           )}
