@@ -1,0 +1,6 @@
+{
+  "name": "SyncWatch for Pixeldrain",
+  "description": "Watch together a video file with synced playback from pixeldrain.com. Share the website link to watch videos in real-time with friends.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
